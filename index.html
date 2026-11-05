@@ -120,7 +120,7 @@ nav svg{width:25px;height:25px}
 .wk{display:flex;gap:6px;margin-top:10px;width:100%}
 .wk div{flex:1;font-size:12px;color:var(--mu);display:flex;flex-direction:column;align-items:center;gap:3px}
 .wk b{display:grid;place-items:center;width:100%;max-width:38px;aspect-ratio:1;border-radius:50%;background:var(--s2);color:var(--tx);font-size:14px}
-.wk .d b{background:linear-gradient(135deg,var(--ac2),var(--ac))}.wk .t b{box-shadow:0 0 0 2px #fff}
+.wk .d b{background:linear-gradient(135deg,var(--ac2),var(--ac))}.wk .cv b{background:#2f5fa8;color:#fff}.dots7 i.cv{background:#4a86d8}.svs{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:12px;flex-wrap:wrap}.svs span{color:var(--s3);display:grid}.svs span.on{color:#6aa8ff}.svs small{width:100%;text-align:center}.wk .t b{box-shadow:0 0 0 2px #fff}
 @keyframes fk{0%,100%{transform:scale(1,1) skewX(0)}30%{transform:scale(.95,1.07) skewX(2deg)}60%{transform:scale(1.04,.96) skewX(-2deg)}}
 
 /* plan */
@@ -359,7 +359,7 @@ const IC={
  stats:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
  gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
  back:'<path d="M9 6l6 6-6 6"/>',chev:'<path d="M15 6l-6 6 6 6"/>',
- check:'<path d="M5 12.5l4.5 4.5L19 7"/>',x:'<path d="M6 6l12 12M18 6L6 18"/>',
+ check:'<path d="M5 12.5l4.5 4.5L19 7"/>',shield:'<path d="M12 3l7 3v5c0 4.6-3 8.3-7 10-4-1.7-7-5.4-7-10V6z"/><path d="M9 12l2 2 4-4"/>',x:'<path d="M6 6l12 12M18 6L6 18"/>',
  pause:'<path d="M8 5v14M16 5v14"/>',playI:'<path d="M7 4l13 8-13 8z"/>',skip:'<path d="M5 5l10 7-10 7zM19 5v14"/>',stop:'<rect x="6" y="6" width="12" height="12" rx="2"/>',
  hurt:'<path d="M12 7v6M12 16.5v.5"/><circle cx="12" cy="12" r="10"/>',
  bulb:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c1 1 1.5 2 1.5 3.5h5c0-1.5.5-2.5 1.5-3.5A6 6 0 0 0 12 3z"/>',
@@ -425,18 +425,30 @@ const lgR=k=>S.log[k]||{ml:0,wk:0,st:0,km:0,kc:0,ss:[],wl:[]};
 /* ---------- streak: active day = workout OR walk >= 20 min OR plan day ---------- */
 const ACTW=20;
 const actSet=()=>{const s=new Set([...S.done,...S.act]);for(const k in S.log)if((+S.log[k].wk||0)>=ACTW)s.add(k);return s};
-function sInfo(){const ds=[...actSet()].map(dk).sort((a,b)=>a-b);if(!ds.length)return{n:0,st:'none',best:0,prev:0};
- const gap=dk(key())-ds[ds.length-1];let best=0,run=0;ds.forEach((d,i)=>{run=i&&d-ds[i-1]===1?run+1:1;best=Math.max(best,run)});
- return{n:gap<=1?run:0,best,st:gap<=0?'ok':gap===1?'risk':'lost',prev:run}}
+/* streak rules: one missed day is free; from the 2nd missed day in a row each day uses a save (3 per month); no saves left -> it breaks */
+const SAVES=3;const mOf=d=>{const t=new Date(d*864e5);return t.getUTCFullYear()+'-'+(t.getUTCMonth()+1)};const kOf=d=>{const t=new Date(d*864e5);return t.getUTCFullYear()+'-'+(t.getUTCMonth()+1)+'-'+t.getUTCDate()};
+function sInfo(){const A=actSet(),has=new Set([...A].map(dk)),ds=[...has].sort((a,b)=>a-b),today=dk(key()),tm=mOf(today);
+ if(!ds.length)return{n:0,st:'none',best:0,prev:0,sv:SAVES,cov:new Set(),miss:0};
+ const used={},cov=new Set();let run=0,best=0,miss=0,prev=0;
+ for(let d=ds[0];d<today;d++){if(has.has(d)){run++;miss=0;best=Math.max(best,run);continue}
+  if(!run)continue;miss++;if(miss===1)continue;const m=mOf(d);
+  if((used[m]||0)<SAVES){used[m]=(used[m]||0)+1;cov.add(kOf(d))}else{prev=run;run=0;miss=0}}
+ const sv=Math.max(0,SAVES-(used[tm]||0));let st;
+ if(has.has(today)){run++;best=Math.max(best,run);st='ok'}
+ else if(!run)st=prev?'lost':'none';
+ else st=miss?'risk':'pend';
+ return{n:run,st,best,prev:run||prev,sv,cov,miss}}
+const savesTxt=n=>n===0?'ما باقي محاولات هالشهر':n===1?'باقي لك محاولة وحدة هالشهر':n===2?'باقي لك محاولتين هالشهر':'باقي لك '+ar(n)+' محاولات هالشهر';
+function riskTxt(i){return i.sv?`أمس ما فيه نشاط. إذا اليوم بعد ما تمرنتي ولا مشيتي ${MD(ACTW)}، تنخصم محاولة وحدة ويبقى الستريك. ${savesTxt(i.sv)}.`:`أمس ما فيه نشاط، وما باقي محاولات هالشهر. تمرين قصير أو مشي ${MD(ACTW)} اليوم يحفظه، وإلا يطير بعد ${hlTxt()}.`}
 const streak=()=>sInfo().n;
 const hoursLeft=()=>{const n=new Date(),m=new Date(n);m.setHours(24,0,0,0);return Math.max(0,(m-n)/36e5)};
 const hlTxt=()=>{const h=hoursLeft();return h<1?'أقل من ساعة':ar(Math.floor(h))+' ساعة'};
 const weekN=()=>{let n=0;for(let i=0;i<7;i++)if(S.done.includes(kAgo(i)))n++;return n};
 const daysW=n=>n===1?'يوم':n===2?'يومين':n<=10?'أيام':'يوم';
-function strk(){const i=sInfo(),A=actSet(),M={none:'ابدئي أول تمرين أو امشي ٢٠ دقيقة وشعلي الستريك!',ok:i.n>=7?'ما شاء الله عليك، نار! ستريك اليوم محفوظ':'ممتاز! ستريك اليوم محفوظ',risk:`انتبهي! الستريك يطير بعد ${hlTxt()} إذا ما تمرنتي أو مشيتي ٢٠ دقيقة اليوم`,lost:`طار الستريك (كان ${ar(i.prev)} ${daysW(i.prev)}) لأنه مر يومين بدون نشاط. ابدئي من جديد اليوم`};let w='';
- for(let k=6;k>=0;k--){const d=new Date();d.setDate(d.getDate()-k);const dn=A.has(key(d));w+=`<div class="${dn?'d':''} ${k?'':'t'}">${WS[d.getDay()]}<b>${dn?SV(IC.check,16):ar(d.getDate())}</b></div>`}
- return `<section class="strk ${i.n?'':'off'} ${i.st==='risk'?'risk':''}" aria-label="الستريك"><svg class="fb" viewBox="0 0 64 80" aria-hidden="true">${FLP}</svg><div class="nm">${ar(i.n)}</div><p>${i.n===1?'يوم متتالي':i.n===2?'يومين متتاليين':'أيام متتالية'}</p><p class="${i.st==='risk'?'note':'mu'}">${M[i.st]}</p><div class="wk">${w}</div><small style="margin-top:8px">يزيد الستريك إذا خلصتي تمرين أو مشيتي ${MD(ACTW)} | أفضل ستريك ${ar(i.best)}</small></section>`}
-function alertCard(){const i=sInfo();if(i.st==='risk')return `<section class="alert" role="alert"><span style="color:#ffb27a">${SV(IC.warn,30)}</span><div class="sp"><b>ستريكك ${ar(i.n)} ${daysW(i.n)} في خطر</b><small style="color:#ffd2b3">باقي ${hlTxt()} على نهاية اليوم. تمرين قصير أو مشي ${MD(ACTW)} يحفظه.</small></div></section>`;
+function strk(){const i=sInfo(),A=actSet(),M={none:'ابدئي أول تمرين أو امشي ٢٠ دقيقة وشعلي الستريك!',ok:i.n>=7?'ما شاء الله عليك، نار! ستريك اليوم محفوظ':'ممتاز! ستريك اليوم محفوظ',pend:`تمرني أو امشي ${MD(ACTW)} اليوم عشان يزيد الستريك`,risk:riskTxt(i),lost:`طار الستريك (كان ${ar(i.prev)} ${daysW(i.prev)}). ابدئي من جديد اليوم، وكل شهر لك ${ar(SAVES)} محاولات جديدة`};let w='';
+ for(let k=6;k>=0;k--){const d=new Date();d.setDate(d.getDate()-k);const dn=A.has(key(d)),cv=i.cov.has(key(d));w+=`<div class="${dn?'d':cv?'cv':''} ${k?'':'t'}">${WS[d.getDay()]}<b>${dn?SV(IC.check,16):cv?SV(IC.shield,16):ar(d.getDate())}</b></div>`}
+ return `<section class="strk ${i.n?'':'off'} ${i.st==='risk'?'risk':''}" aria-label="الستريك"><svg class="fb" viewBox="0 0 64 80" aria-hidden="true">${FLP}</svg><div class="nm">${ar(i.n)}</div><p>${i.n===1?'يوم متتالي':i.n===2?'يومين متتاليين':'أيام متتالية'}</p><p class="${i.st==='risk'?'note':'mu'}">${M[i.st]}</p><div class="wk">${w}</div><div class="svs" aria-label="المحاولات">${[0,1,2].map(k=>`<span class="${k<i.sv?'on':''}">${SV(IC.shield,18)}</span>`).join('')}<small>${savesTxt(i.sv)}</small></div><small style="margin-top:8px">يوم واحد بدون نشاط مسموح. من ثاني يوم ورا بعض تنخصم محاولة، وإذا خلصت المحاولات يطير | أفضل ستريك ${ar(i.best)}</small></section>`}
+function alertCard(){const i=sInfo();if(i.st==='risk')return `<section class="alert" role="alert"><span style="color:#ffb27a">${SV(IC.warn,30)}</span><div class="sp"><b>${i.sv?'انتبهي على ستريكك':'ستريكك '+ar(i.n)+' '+daysW(i.n)+' في خطر'}</b><small style="color:#ffd2b3">${riskTxt(i)}</small></div></section>`;
  if(i.st==='lost'&&i.prev>=2)return `<section class="alert lost"><span>${FL(28)}</span><div class="sp"><b>طار الستريك</b><small>كان ${ar(i.prev)} ${daysW(i.prev)}. ولا يهمك، ابدئي اليوم من جديد.</small></div></section>`;return ''}
 
 /* ---------- body plan ---------- */
@@ -1135,8 +1147,8 @@ const MORE=[['water','الماء',IC.drop,'#4aa8ff'],['walk','المشي',IC.wal
 function moreSheet(){openSheet(`<h2>المزيد</h2><div class="mgrid">${MORE.map(m=>`<button type="button" class="mitem" onclick="closeS();${m[0]==='walk'?'openWalk()':m[0]==='report'?'sendReport()':`go('${m[0]}')`}"><span style="color:${m[3]}">${SV(m[2],28)}</span><span>${m[0]==='msgs'?'رسائل '+esc(sonName()):m[1]}</span></button>`).join('')}</div>`)}
 
 /* ---------- home (decluttered) ---------- */
-function strkMini(){const i=sInfo(),A=actSet();let w='';for(let k=6;k>=0;k--){const d=new Date();d.setDate(d.getDate()-k);w+=`<i class="${A.has(key(d))?'on':''} ${k?'':'t'}" title="${WS[d.getDay()]}"></i>`}
- return `<button type="button" class="card-btn smini ${i.st==='risk'?'risk':''}" onclick="go('me')"><svg class="fb sm ${i.n?'':'off'}" viewBox="0 0 64 80" aria-hidden="true">${FLP}</svg><div class="sp"><b class="num" style="font-size:24px">${ar(i.n)} <span style="font:700 15px var(--f-b)">${i.n===1?'يوم متتالي':i.n===2?'يومين متتاليين':'أيام متتالية'}</span></b><div class="dots7">${w}</div><small>${i.st==='risk'?'تمرين أو مشي ٢٠ دقيقة اليوم يحفظه':i.st==='ok'?'ستريك اليوم محفوظ':i.st==='lost'?'طار الستريك بعد يومين بدون نشاط، ابدئي من جديد اليوم':'ابدئي أول تمرين أو مشي ٢٠ دقيقة'}</small></div><span class="chev">${SV(IC.chev,20)}</span></button>`}
+function strkMini(){const i=sInfo(),A=actSet();let w='';for(let k=6;k>=0;k--){const d=new Date();d.setDate(d.getDate()-k);w+=`<i class="${A.has(key(d))?'on':i.cov.has(key(d))?'cv':''} ${k?'':'t'}" title="${WS[d.getDay()]}"></i>`}
+ return `<button type="button" class="card-btn smini ${i.st==='risk'?'risk':''}" onclick="go('me')"><svg class="fb sm ${i.n?'':'off'}" viewBox="0 0 64 80" aria-hidden="true">${FLP}</svg><div class="sp"><b class="num" style="font-size:24px">${ar(i.n)} <span style="font:700 15px var(--f-b)">${i.n===1?'يوم متتالي':i.n===2?'يومين متتاليين':'أيام متتالية'}</span></b><div class="dots7">${w}</div><small>${i.st==='risk'?(i.sv?'أمس فاتك، تمرني اليوم | '+savesTxt(i.sv):'ما باقي محاولات، تمرين أو مشي اليوم يحفظه'):i.st==='pend'?'تمرني اليوم عشان يزيد | '+ar(i.sv)+' محاولات':i.st==='ok'?'ستريك اليوم محفوظ':i.st==='lost'?'طار الستريك، ابدئي من جديد اليوم':'ابدئي أول تمرين أو مشي ٢٠ دقيقة'}</small></div><span class="chev">${SV(IC.chev,20)}</span></button>`}
 function tiles(){const o=lgR(key()),g=waterGoal(),tgt=walkTarget(),st=stepsOf(o);
  const t=(fn,lab,val,sub,pc,col)=>`<button type="button" class="tile" onclick="${fn}"><div class="tr">${sring(pc,col,64)}<b class="num">${val}</b></div><span>${lab}</span><small>${sub}</small></button>`;
  return `<section class="tiles" aria-label="اليوم">${t("go('water')",'الماء',ar(Math.floor(o.ml/250)),'من '+ar(g/250)+' أكواب',o.ml/g,'#4aa8ff')}${t('openWalk()','المشي',ar(o.wk),'من '+MD(tgt),o.wk/tgt,'#5fd38d')}${t('openWalk()','الخطوات',st>=1000?ar(r1(st/1000))+'ك':ar(st),'من '+fmtN(STEPG),st/STEPG,'#ffc46b')}</section><button type="button" class="qb wa" style="min-height:48px" onclick="addWa(250)">+ شربت كوب ماء</button>`}
